@@ -6,7 +6,7 @@ import { FORGE_SYSTEM, REVISE_SYSTEM, forgeUserPrompt, reviseUserPrompt } from "
 import type { ChatTurn, Outcome, OutcomeKind, OutcomeSummary } from "@/lib/forge/types";
 
 const KINDS: OutcomeKind[] = ["report", "action", "document", "code", "insights"];
-const MODEL = "grok-4.5";
+const MODEL = "gemini-2.5-flash";
 
 type DbRow = {
   id: string;
@@ -87,52 +87,69 @@ function toOutcome(row: DbRow): Outcome {
 }
 
 async function callModel(messages: { role: "system" | "user"; content: string }[]): Promise<string> {
-  const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) throw new Error("Add XAI_API_KEY to the .env file in the project root, then restart.");
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Add GEMINI_API_KEY to the .env file in the project root, then restart.");
+
+  const system = messages.find((message) => message.role === "system")?.content ?? "";
+  const user = messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content)
+    .join("\n\n");
 
   let lastStatus = 0;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let response: Response;
     try {
-      response = await fetch("https://api.x.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            systemInstruction: system ? { parts: [{ text: system }] } : undefined,
+            contents: [{ role: "user", parts: [{ text: user }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 4096,
+              responseMimeType: "application/json",
+            },
+          }),
+          signal: AbortSignal.timeout(50_000),
         },
-        body: JSON.stringify({
-          model: MODEL,
-          temperature: 0.3,
-          max_tokens: 2400,
-          messages,
-        }),
-        signal: AbortSignal.timeout(50_000),
-      });
+      );
     } catch {
-      if (attempt === 1) throw new Error("Could not reach the model. Try again.");
+      if (attempt === 1) throw new Error("Could not reach Gemini. Try again.");
       continue;
     }
 
     if (response.ok) {
       const body = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
+        candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
       };
-      const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-      if (!text) throw new Error("The model returned an empty outcome. Try again.");
+      const parts = body.candidates?.[0]?.content?.parts ?? [];
+      const text = parts
+        .filter((part) => part.text && !part.thought)
+        .map((part) => part.text)
+        .join("")
+        .trim();
+      if (!text) throw new Error("Gemini returned an empty outcome. Try again.");
       return text;
     }
 
     lastStatus = response.status;
-    if (response.status === 401 || response.status === 402 || response.status === 403) {
-      throw new Error("The model quota is used up right now. Forging will work again when credits are available.");
+    if (response.status === 400 || response.status === 401 || response.status === 403) {
+      throw new Error("That Gemini key was rejected. Check GEMINI_API_KEY in the .env file.");
     }
     if (response.status < 500 && response.status !== 429) break;
   }
 
   throw new Error(
     lastStatus === 429
-      ? "The model is busy. Wait a moment and forge again."
-      : "Could not reach the model. Try again.",
+      ? "Gemini is busy or out of quota. Wait a moment and forge again."
+      : "Could not reach Gemini. Try again.",
   );
 }
 

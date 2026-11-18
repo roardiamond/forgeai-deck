@@ -10,13 +10,13 @@ The model key is read from one file, and only on the server.
 
 1. In the project root, copy `.env.example` to `.env`.
 2. Open `.env`.
-3. Paste your xAI key on this line:
+3. Paste your Gemini key on this line:
 
 ```
-XAI_API_KEY=xai-your-key-here
+GEMINI_API_KEY=your-gemini-key-here
 ```
 
-Get the key from [console.x.ai](https://console.x.ai). Do not commit `.env`. Restart `npm run dev` after you save it.
+Get the key from [Google AI Studio](https://aistudio.google.com/apikey). Do not commit `.env`. Restart `npm run dev` after you save it.
 
 ```
 npm install
@@ -91,7 +91,7 @@ Return a single JSON object and nothing else: {"title": string, "markdown": stri
 - Preserve useful structure unless the user asked to change it.
 ```
 
-The model is `grok-4.5` through the server. Calls happen only when you forge or revise. Output is capped.
+The model is `gemini-2.5-flash`. Calls happen only when you forge or revise. Output is capped.
 
 ## Data
 
@@ -117,7 +117,7 @@ Account tables live in `migrations/0001_auth.sql`.
 
 ## Stack
 
-React, TypeScript, and Tailwind on TanStack Start. Sign-in is email and password on your own machine, plus Google and X when the app is hosted. The model is `grok-4.5` through `XAI_API_KEY` in `.env`. History uses a local Postgres-compatible database unless you set `DATABASE_URL`.
+React, TypeScript, and Tailwind on TanStack Start. Sign-in is email and password on your own machine, plus Google and X when the app is hosted. The model is Gemini through `GEMINI_API_KEY` in `.env`. History uses a local Postgres-compatible database unless you set `DATABASE_URL`.
 
 ## Layout
 
